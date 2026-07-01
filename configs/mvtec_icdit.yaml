@@ -1,0 +1,73 @@
+# mvtec_layout_guided_defect_generation
+
+# Conda环境
+# conda activate omg
+
+project_name: "mvtec_layout_guided_defect_generation"
+seed: 42
+
+data:
+  root: "/home/czs/Desktop/MVTec"
+  image_size: 256
+  categories: "all"                       # "all" or list: ["bottle","capsule"]
+  use_good_images: true
+  use_defective_images: true
+  use_reference_normal: true
+  mask_dilation: 0
+  mask_random_augment: true
+  descriptions_path: "./mvtec_descriptions.json"  # VLM per-image descriptions (null=fallback to hand-written)
+
+model:
+  latent_channels: 4                       # SD VAE latent channels
+  hidden_dim: 768                          # Unified hidden dim for projectors & DiT
+  num_layers: 12                           # DiT transformer layers
+  num_heads: 12                            # Attention heads
+  patch_size: 2                            # Latent patch size (latent is 32x32 -> 16x16 patches)
+  text_encoder_name: "google/t5-v1_1-base"
+  text_max_length: 512
+  vae_name: "stabilityai/sd-vae-ft-mse"
+  visual_encoder_name: "dinov2_vitb14"
+  freeze_text_encoder: true
+  freeze_vae: true
+  freeze_layout_encoder: true
+  freeze_visual_encoder: true
+  training_mode: "full_generator"          # "full_generator" or "adapter_lora"
+  visual_embedding_source: "reference_normal"  # "reference_normal" or "target"
+  dedicated_layout_vae: true               # Paper Fig.3: dedicated VAE encoder for layout masks
+  dropout: 0.1                             # Dropout in DiT attention & FFN (was 0.0)
+
+diffusion:
+  num_train_timesteps: 1000
+  num_inference_steps: 50
+  prediction_type: "epsilon"               # "epsilon" or "v_prediction"
+  beta_schedule: "cosine"                  # "linear" or "cosine" — cosine improves convergence
+
+train:
+  batch_size: 4                          # Reduced from 8 — w/ 4 frozen encoders + DiT
+                                         # backbone, 8×batch OOMs 24 GB.  Accumulation
+                                         # ×2 keeps effective batch = 8.
+  num_epochs: 250
+  lr: 1e-4
+  weight_decay: 1e-2
+  gradient_accumulation_steps: 2          # ×2 → effective batch = 4×2 = 8
+  mixed_precision: "fp16"               # "no"=fp32, "fp16", "bf16" (A100/H100 only)
+                                         # If NaN persists, try "no" (fp32) first to isolate
+                                         # fp16 overflow, then switch back once stable.
+  max_grad_norm: 10.0                     # Clip at 10.0 (raised from 1.0 — DiT backbone
+                                         # with zero-init output_proj produces raw grad
+                                         # norms ~50k-100k early in training. 1.0 was
+                                         # clipping 72000×, destroying gradient signal.)
+  warmup_steps: 1000                      # Linear warmup steps (prevents early instability)
+  lr_restart_T_0: 50                      # Epochs per first cosine restart cycle
+  lr_restart_T_mult: 2                    # Multiplicative factor for subsequent cycles
+  ema_decay: 0.9999                       # Exponential Moving Average decay (0=disable)
+  cfg_dropout_prob: 0.15                   # 15% null prompt for CFG training (was 0.1)
+  # Auxiliary multimodal alignment losses (0 = disable)
+  aux_loss_weight_text: 0.01               # Text token consistency (MSE with initial)
+  aux_loss_weight_layout: 0.1              # Spatial grounding (BCE mask reconstruction)
+  aux_loss_weight_visual: 0.01             # Visual token consistency (MSE with initial)
+  log_every: 50
+  save_every: 1000
+  sample_every: 1000
+  num_sample_images: 4
+  output_dir: "./outputs"  # 最后一步，100 epoch

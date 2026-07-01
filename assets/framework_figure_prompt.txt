@@ -1,0 +1,39 @@
+A clean academic architecture diagram for a deep learning paper, white background, showing a "Layout-Guided Controllable Defect Generation" framework for industrial manufacturing. The diagram should have four input modules on the left feeding into a central processing pipeline and a single output on the right.
+
+INPUTS (left side, top to bottom, each shown as a rounded box with an icon):
+1. "Defect Mask" — a small binary anomaly map (black background with white defect region)
+2. "Text Prompt" — text: "a bottle with a broken defect in the mask region"
+3. "Reference Image" — a normal product photo of a glass bottle
+4. "Target Image" — a defective product photo (the same bottle with a broken neck)
+
+FLOW (left to right):
+- Each of the 4 inputs passes through a colored encoder block:
+  - Mask → "Frozen Layout Encoder (VAE)" [blue box] → "Layout Projector" [orange box, labeled "Trainable"]
+  - Text → "Frozen Text Encoder (CLIP)" [blue box] → "Text Projector" [orange box, labeled "Trainable"]
+  - Reference → "Frozen Visual Encoder (DINOv2)" [blue box] → "Visual Projector" [orange box, labeled "Trainable"]
+  - Target → "Frozen Image Encoder (VAE)" [blue box] → noisy latent z_t
+
+CENTRAL BLOCK (large orange box in the middle, labeled "TRAINABLE"):
+- Title: "Latent Diffusion Transformer (LatentDiT)"
+- Inside: show 3 stacked transformer blocks, each labeled "MM-Attention Block":
+  - Block shows "Concat QKV Attention" with three lines merging: "Image↔Text", "Image↔Layout", "Image↔Visual"
+  - Each block has "Self-Attn → Cross-Attn → FFN" internal structure
+- Show timestep embedding "t" entering from the top as a small sinusoidal signal icon
+- Show information flow arrows between the 3 projector outputs and the MM-Attention blocks
+
+RIGHT SIDE:
+- Output arrow from the last MM-Attention block → "Predicted Noise ε_θ"
+- Below: a denoising loop indicator (circular arrow icon with label "DDIM Sampling 50 steps")
+- Final output: "Frozen VAE Decoder" [blue box] → "Generated Defect Image" (show a small bottle image with the defect synthesized in the mask region)
+
+VISUAL STYLE:
+- Use a clear color scheme: BLUE (#4A90D9) for all Frozen/pretrained modules, ORANGE (#E67E22) for all Trainable modules
+- Arrows between components should be thin black lines with arrowheads
+- Add a legend box in the bottom-right corner: "■ Frozen (Pretrained)" in blue, "■ Trainable (Updated by loss)" in orange
+- Add a subtle "L = MSE(ε_θ, ε)" loss formula near the noise prediction output
+- Font: clean sans-serif, 10-12pt, dark gray
+- The overall layout should be structured as pipeline columns: Inputs → Encoding → Fusion → Output
+- Add a light gray dashed border around the entire figure
+- Title at the top in bold: "IC-DiT: In-Context Diffusion Transformer for Layout-Guided Defect Generation"
+
+The diagram should look like Figure 3 from a top-tier CVPR/ICCV paper — professional, well-spaced, with clear visual hierarchy between frozen and trainable components.
