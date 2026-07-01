@@ -206,14 +206,6 @@ class MMAttentionBlock(nn.Module):
         self.norm_layout_cond = nn.LayerNorm(dim)
         self.norm_visual_cond = nn.LayerNorm(dim)
 
-        # --- Condition token OUTPUT norms (bounds values between blocks) ---
-        # Without these, 12 layers of residual updates can drive token values
-        # past fp16 max even with internal attention clamps.
-        self.norm_img_out = nn.LayerNorm(dim)
-        self.norm_text_out = nn.LayerNorm(dim)
-        self.norm_layout_out = nn.LayerNorm(dim)
-        self.norm_visual_out = nn.LayerNorm(dim)
-
         # --- Self-attention among image tokens ---
         if use_self_attn:
             self.self_attn = nn.MultiheadAttention(
@@ -245,42 +237,37 @@ class MMAttentionBlock(nn.Module):
             x, _ = self.self_attn(x, x, x)
             if x.dtype == torch.float16:
                 x = torch.clamp(x, min=-60000.0, max=60000.0)
-            image_tokens = image_tokens + x * 0.5
+            image_tokens = image_tokens + x
 
         # ---- 2. Concat-QKV: image <-> text (Eq.6) ----
         x_img = self.norm_text_in(image_tokens)
-        x_txt = self.norm_text_cond(text_tokens)      # normalize cond tokens for fp16 safety
+        x_txt = self.norm_text_cond(text_tokens)
         delta_img, delta_txt = self.fusion_text(x_img, x_txt)
-        # Scale residual to prevent fp16 overflow across 12 layers
-        image_tokens = image_tokens + delta_img * 0.5
-        text_tokens = text_tokens + delta_txt * 0.5
+        image_tokens = image_tokens + delta_img
+        text_tokens = text_tokens + delta_txt
 
         # ---- 3. Concat-QKV: image <-> layout (Eq.7) ----
         x_img = self.norm_layout_in(image_tokens)
-        x_lay = self.norm_layout_cond(layout_tokens)  # normalize cond tokens for fp16 safety
+        x_lay = self.norm_layout_cond(layout_tokens)
         delta_img, delta_lay = self.fusion_layout(x_img, x_lay)
-        image_tokens = image_tokens + delta_img * 0.5
-        layout_tokens = layout_tokens + delta_lay * 0.5
+        image_tokens = image_tokens + delta_img
+        layout_tokens = layout_tokens + delta_lay
 
         # ---- 4. Concat-QKV: image <-> visual embedding (Eq.8) ----
         x_img = self.norm_visual_in(image_tokens)
-        x_vis = self.norm_visual_cond(visual_tokens)  # normalize cond tokens for fp16 safety
+        x_vis = self.norm_visual_cond(visual_tokens)
         delta_img, delta_vis = self.fusion_visual(x_img, x_vis)
-        image_tokens = image_tokens + delta_img * 0.5
-        visual_tokens = visual_tokens + delta_vis * 0.5
+        image_tokens = image_tokens + delta_img
+        visual_tokens = visual_tokens + delta_vis
 
         # ---- 5. Feed-forward ----
         x = self.norm_ffn(image_tokens)
         x = self.ffn(x)
         image_tokens = image_tokens + x
 
-        # ---- 6. Output safety clamp + norms ----
+        # ---- 6. Output safety clamp (no norms — standard residual stream) ----
         if image_tokens.dtype == torch.float16:
             image_tokens = torch.clamp(image_tokens, min=-60000.0, max=60000.0)
-        image_tokens   = self.norm_img_out(image_tokens)
-        text_tokens    = self.norm_text_out(text_tokens)
-        layout_tokens  = self.norm_layout_out(layout_tokens)
-        visual_tokens  = self.norm_visual_out(visual_tokens)
 
         return image_tokens, text_tokens, layout_tokens, visual_tokens
 
