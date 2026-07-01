@@ -582,9 +582,10 @@ def main():
                         config["train"].get("max_grad_norm", 1.0),
                     )
 
-                optimizer.step()
-                lr_scheduler.step()
-                optimizer.zero_grad()
+                if accelerator.sync_gradients:
+                    optimizer.step()
+                    lr_scheduler.step()
+                    optimizer.zero_grad()
 
                 # ---- EMA update (after optimizer step) ----
                 if ema_model is not None and accelerator.sync_gradients:
